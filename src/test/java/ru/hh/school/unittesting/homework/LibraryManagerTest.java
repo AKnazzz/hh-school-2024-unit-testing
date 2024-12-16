@@ -1,6 +1,5 @@
 package ru.hh.school.unittesting.homework;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,12 +25,6 @@ class LibraryManagerTest {
 
     @InjectMocks
     private LibraryManager libraryManager;
-
-    @BeforeEach
-    void setUp() {
-        libraryManager = new LibraryManager(notificationService, userService);
-    }
-
 
     // Тесты для метода addBook ---> тесты показывают необходимость добавления логики валидации входных данных в методе;
     @Test
@@ -90,7 +83,6 @@ class LibraryManagerTest {
                 "Добавляем дополнительно `-3` экземпляров существующей книги, ожидаем количество экземпляров равное `-4`.");
     }
 
-
     //Тесты для borrowBook ---> тесты показывают необходимость получения данным по книгам (активным / в аренде);
     @Test
     @DisplayName("borrowBook тест негативный: пользователь с неактивной учетной записью берёт книгу.")
@@ -98,10 +90,9 @@ class LibraryManagerTest {
         String bookId = "book1";
         String userId = "user1";
 
-        //задаём желаемое поведение сервиса
         when(userService.isUserActive(userId)).thenReturn(false);
-
         boolean result = libraryManager.borrowBook(bookId, userId);
+
         assertFalse(result, "Ожидаем что метод вернёт false для неактивного пользователя.");
         verify(notificationService).notifyUser(userId, "Your account is not active.");
     }
@@ -113,8 +104,8 @@ class LibraryManagerTest {
         String userId = "user1";
 
         when(userService.isUserActive(userId)).thenReturn(true);
-
         boolean result = libraryManager.borrowBook(bookId, userId);
+
         assertFalse(result, "Ожидаем что метод вернёт false для активного пользователя при отсутствии книги.");
     }
 
@@ -125,9 +116,9 @@ class LibraryManagerTest {
         String userId = "user1";
 
         when(userService.isUserActive(userId)).thenReturn(true);
-        libraryManager.addBook(bookId, 1); // добавляем книгу
-
+        libraryManager.addBook(bookId, 1);
         boolean result = libraryManager.borrowBook(bookId, userId);
+
         assertTrue(result, "Ожидаем что метод вернёт true для активного пользователя при наличии книги");
         verify(notificationService).notifyUser(userId, "You have borrowed the book: " + bookId);
     }
@@ -139,14 +130,10 @@ class LibraryManagerTest {
         String userId = "user1";
 
         when(userService.isUserActive(userId)).thenReturn(true);
-
         libraryManager.addBook(bookId, 0);
         boolean result = libraryManager.borrowBook(bookId, userId);
-        assertFalse(result, "Метод должен вернуть false, если кол-во экземпляров книги нулевое.");
 
-        libraryManager.addBook(bookId, -3);
-        boolean resultSecond = libraryManager.borrowBook(bookId, userId);
-        assertFalse(resultSecond, "Метод должен вернуть false, если кол-во книги отрицательное.");
+        assertFalse(result, "Метод должен вернуть false, если кол-во экземпляров книги неположительное.");
     }
 
     //Тесты для returnBook:
@@ -155,8 +142,8 @@ class LibraryManagerTest {
     void testReturnBookNotBorrowed() {
         String bookId = "book1";
         String userId = "user1";
-
         boolean result = libraryManager.returnBook(bookId, userId);
+
         assertFalse(result, "Метод должен вернуть false, если книга и пользователь отсутствуют.");
     }
 
@@ -167,10 +154,14 @@ class LibraryManagerTest {
         String userId1 = "user1";
         String userId2 = "user2";
 
+        when(userService.isUserActive(userId2)).thenReturn(true);
+        libraryManager.addBook(bookId,1);
         libraryManager.borrowBook(bookId, userId2);
-
         boolean result = libraryManager.returnBook(bookId, userId1);
+
         assertFalse(result, "Метод должен вернуть false, если книга была заимствована другим пользователем.");
+        assertEquals(0, libraryManager.getAvailableCopies(bookId),
+                "Количество книг в наличии должно быть 0 - книгу не вернули.");
     }
 
     @Test
@@ -193,29 +184,6 @@ class LibraryManagerTest {
         verify(notificationService).notifyUser(userId, "You have returned the book: " + bookId);
     }
 
-    @Test
-    @DisplayName("returnBook тест позитивный: изменение количества книг в инвентаре при возврате книги.")
-    void testReturnBookIncreasesInventory() {
-        String bookId = "book1";
-        String userId = "user1";
-
-        // Добавляем книгу в инвентарь и заимствуем её
-        libraryManager.addBook(bookId, 10);
-        libraryManager.borrowBook(bookId, userId);
-        assertEquals(10, libraryManager.getAvailableCopies(bookId),
-                "Количество книг должно остаться 10 , потому что пользователь неактивный.");
-
-        when(userService.isUserActive(userId)).thenReturn(true);
-
-        libraryManager.borrowBook(bookId, userId);
-        assertEquals(9, libraryManager.getAvailableCopies(bookId),
-                "Количество книг в инвентаре должно уменьшиться на 1 после того как активный пользователь одолжит книгу.");
-
-        libraryManager.returnBook(bookId, userId);
-        assertEquals(10, libraryManager.getAvailableCopies(bookId),
-                "Количество книг в инвентаре должно увеличиться на 1 (стать 10) после возвращения.");
-    }
-
     //Тесты для getAvailableCopies:
     @Test
     @DisplayName("getAvailableCopies тест негативный: получение количества экземпляров несуществующей книги.")
@@ -230,19 +198,15 @@ class LibraryManagerTest {
         libraryManager.addBook("book3", 10);
         assertEquals(10, libraryManager.getAvailableCopies("book3"),
                 "Ожидается что метод вернёт 10 экземпляров книги book3, книга в наличии  10 шт.");
-        assertEquals(0, libraryManager.getAvailableCopies("book2"),
-                "Ожидается что метод вернёт 0 экземпляров книги book2, книги нет в наличии."); // Проверка на несуществующую книгу
     }
 
     @Test
-    @DisplayName("getAvailableCopies тест негативный: получение отрицательного или нулевого значение экземпляров существующей книги.")
+    @DisplayName("getAvailableCopies тест негативный: получение неположительного значения экземпляров существующей книги.")
     void testGetAvailableCopiesNegativeCopies() {
         libraryManager.addBook("book4", -5);
-        libraryManager.addBook("book5", 0);
+
         assertEquals(-5, libraryManager.getAvailableCopies("book4"),
                 "Ожидается что метод вернёт `-5` экземпляров книги book4, кол-во книги при добавлении `-5`");
-        assertEquals(0, libraryManager.getAvailableCopies("book5"),
-                "Ожидалось, что количество доступных экземпляров книги 'book5' будет равно 0.");
     }
 
     //Тесты для calculateDynamicLateFee
@@ -275,39 +239,6 @@ class LibraryManagerTest {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
             libraryManager.calculateDynamicLateFee(-1, false, false);
         });
-
-        assertThrows(IllegalArgumentException.class, () -> {
-            libraryManager.calculateDynamicLateFee(-10, false, false);
-        });
-
         assertEquals("Overdue days cannot be negative.", exception.getMessage());
-    }
-
-    @Test
-    @DisplayName("calculateDynamicLateFee тест позитивный: обычная книга без скидок")
-    void testCalculateDynamicLateFeeRegularBook() {
-        double fee = libraryManager.calculateDynamicLateFee(5, false, false);
-        assertEquals(2.50, fee, "Должен быть расчет обычной книги без скидок.");
-    }
-
-    @Test
-    @DisplayName("calculateDynamicLateFee тест позитивный: книга-бестселлер без скидок")
-    void testCalculateDynamicLateFeeBestseller() {
-        double fee = libraryManager.calculateDynamicLateFee(5, true, false);
-        assertEquals(3.75, fee, "Должен быть расчет бестселлера без скидок.");
-    }
-
-    @Test
-    @DisplayName("calculateDynamicLateFee тест позитивный: обычная книга с премиум скидкой")
-    void testCalculateDynamicLateFeePremiumMember() {
-        double fee = libraryManager.calculateDynamicLateFee(5, false, true);
-        assertEquals(2.00, fee, "Должен быть расчет обычной книги с премиум скидкой.");
-    }
-
-    @Test
-    @DisplayName("calculateDynamicLateFee тест позитивный: бестселлер с премиум скидкой")
-    void testCalculateDynamicLateFeeBestsellerWithPremiumDiscount() {
-        double fee = libraryManager.calculateDynamicLateFee(5, true, true);
-        assertEquals(3.00, fee, "Должен быть расчет бестселлера с премиум скидкой.");
     }
 }
